@@ -45,6 +45,13 @@ class PodcastsSearchController:UITableViewController,UISearchBarDelegate{
     
     //MARK:- UITableView
     
+    fileprivate func setupTableView(){
+        tableView.tableFooterView = UIView()
+        let nib = UINib(nibName: "PodcastCell", bundle: nil)
+        tableView.register(nib, forCellReuseIdentifier: "cell")
+    }
+    
+    
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         print(indexPath.row)
         let episodesController = EpisodesController()
@@ -63,12 +70,7 @@ class PodcastsSearchController:UITableViewController,UISearchBarDelegate{
         return self.podcasts.count > 0 ? 0:250
     }
 
-    fileprivate func setupTableView(){
-        tableView.tableFooterView = UIView()
-        let nib = UINib(nibName: "PodcastCell", bundle: nil)
-        tableView.register(nib, forCellReuseIdentifier: "cell")
-    }
-    
+   
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         return podcasts.count
     }
