@@ -24,7 +24,11 @@ class EpisodeCell: UITableViewCell {
         }
     }
     
-    @IBOutlet weak var episodeImageView: UIImageView!
+    @IBOutlet weak var episodeImageView: UIImageView!{
+        didSet{
+            episodeImageView.layer.cornerRadius = 5
+        }
+    }
     @IBOutlet weak var pubDateLabel: UILabel!
     @IBOutlet weak var titleLabel: UILabel!
     @IBOutlet weak var descriptionLabel: UILabel!
