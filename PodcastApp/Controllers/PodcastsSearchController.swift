@@ -14,16 +14,12 @@ class PodcastsSearchController:UITableViewController,UISearchBarDelegate{
     
     // UISearchController implentation
     let searchController = UISearchController(searchResultsController: nil)
-    
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-      
         setupSearchBar()
         setupTableView()
-      
-        searchBar(searchController.searchBar, textDidChange: "Voong")
+        searchBar(searchController.searchBar, textDidChange: "voong")
     }
     
     //MARK: - Setup Work
@@ -35,16 +31,19 @@ class PodcastsSearchController:UITableViewController,UISearchBarDelegate{
         searchController.searchBar.delegate = self
     }
     
+    var timer:Timer?
+    
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
-        
-        APIService.shared.fetchPodcast(searchText: searchText) { (podcasts) in
-            self.podcasts = podcasts
-            self.tableView.reloadData()
-        }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: false, block: { (timer) in
+            APIService.shared.fetchPodcast(searchText: searchText) { (podcasts) in
+                self.podcasts = podcasts
+                self.tableView.reloadData()
+            }
+        })
     }
     
     //MARK:- UITableView
-    
     fileprivate func setupTableView(){
         tableView.tableFooterView = UIView()
         let nib = UINib(nibName: "PodcastCell", bundle: nil)

@@ -12,11 +12,13 @@ class PlayerDetailsView:UIView{
     
     var episode:Episode!{
         didSet{
+            miniTitleLabel.text = episode.title
             titleLabel.text = episode.title
             authorLabel.text = episode.author
             playEpisode()
             guard let url = URL(string: episode.imageUrl?.toSecureHTTPS() ?? "") else{return}
             episodeImageView.sd_setImage(with: url, completed: nil)
+            miniEpisodeImageView.sd_setImage(with: url, completed: nil)
         }
     }
     
@@ -36,13 +38,13 @@ class PlayerDetailsView:UIView{
     }()
     
     
-    fileprivate func ObservePlayerCurrentTime() {
+    fileprivate func observePlayerCurrentTime() {
         let interval = CMTimeMake(value: 1, timescale: 2)
-        player.addPeriodicTimeObserver(forInterval: interval, queue:.main) { (time) in
-            self.currentTimeLabel.text = time.toDisplayString()
-            let durationTime = self.player.currentItem?.duration
-            self.durationTimeLabel.text = durationTime?.toDisplayString()
-            self.updateCurrentTimeSlider()
+        player.addPeriodicTimeObserver(forInterval: interval, queue:.main) {[weak self] (time) in
+            self?.currentTimeLabel.text = time.toDisplayString()
+            let durationTime = self?.player.currentItem?.duration
+            self?.durationTimeLabel.text = durationTime?.toDisplayString()
+            self?.updateCurrentTimeSlider()
             
         }
     }
@@ -54,27 +56,100 @@ class PlayerDetailsView:UIView{
         self.currentTimeSlider.value = Float(percentage)
     }
     
+    var pangesture:UIPanGestureRecognizer!
+    
     override func awakeFromNib() {
         super.awakeFromNib()
         
-        ObservePlayerCurrentTime()
-        
+       
+        addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(handleTapMaximize)))
+        pangesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan))
+        addGestureRecognizer(pangesture)
+        observePlayerCurrentTime()
         let time = CMTimeMake(value: 1, timescale: 3)
         let times = [NSValue(time:time)]
-        player.addBoundaryTimeObserver(forTimes: times, queue: .main) {
+        player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
             print("Episode started playing")
-            self.enlargeEpisodeImageView()
+            self?.enlargeEpisodeImageView()
         }
+    }
+    
+    
+    @objc func handlePan(gesture:UIPanGestureRecognizer){
+        
+        if gesture.state == .changed{
+            handlePanChanged(gesture: gesture)
+        }else if gesture.state == .ended{
+            handlePanEnded(gesture: gesture)
+        }
+    }
+    
+    func handlePanChanged(gesture:UIPanGestureRecognizer){
+        let translation = gesture.translation(in: self.superview)
+        self.transform = CGAffineTransform(translationX: 0, y: translation.y)
+        self.miniPlayerView.alpha = 1 + translation.y/200
+        self.maximizedStackView.alpha = -translation.y/200
+    }
+    
+    func handlePanEnded(gesture:UIPanGestureRecognizer){
+        let translation = gesture.translation(in: self.superview)
+        let velocity = gesture.velocity(in: self.superview)
+        
+        UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 1, options: .curveEaseOut) {
+            self.transform = .identity
+            if translation.y < -200 || velocity.y < 500 {
+                let mainTabbarController = UIApplication.shared.keyWindow?.rootViewController as? MainTabbarController
+                mainTabbarController?.maximizePlayerDetails(episode: nil)
+                gesture.isEnabled = false
+            }else{
+                self.miniPlayerView.alpha = 1
+                self.maximizedStackView.alpha = 0
+            }
+        }
+    }
+    
+    
+    @objc func handleTapMaximize(){
+        let mainTabbarController = UIApplication.shared.keyWindow?.rootViewController as? MainTabbarController
+          mainTabbarController?.maximizePlayerDetails(episode: nil)
+        pangesture.isEnabled = false
+    }
+    
+    static func initFromNib()->PlayerDetailsView{
+        return Bundle.main.loadNibNamed("PlayerDetails", owner: self, options: nil)?.first as! PlayerDetailsView
+    }
+    
+    deinit {
+        print("Player DetailView memory reclimed....")
     }
     
 
     //MARK:IBActions and Outlets
+    
+    
+    
+    @IBOutlet weak var miniPlayerView: UIView!
+    @IBOutlet weak var maximizedStackView: UIStackView!
+    
+    
+    @IBOutlet weak var miniEpisodeImageView: UIImageView!
+    @IBOutlet weak var miniTitleLabel: UILabel!
+    @IBOutlet weak var miniPlayPouseButton: UIButton!{
+        didSet{
+            miniPlayPouseButton.addTarget(self, action: #selector(handlePlayPause), for: .touchUpInside)
+        }
+    }
+    @IBOutlet weak var miniFastForwardButton: UIButton!
+    
     @IBOutlet weak var currentTimeLabel: UILabel!
     @IBOutlet weak var durationTimeLabel: UILabel!
     @IBOutlet weak var currentTimeSlider: UISlider!
     
     @IBAction func handleDismiss(_ sender: Any) {
-        self.removeFromSuperview()
+    
+      let mainTabbarController = UIApplication.shared.keyWindow?.rootViewController as? MainTabbarController
+        mainTabbarController?.minimizePlayerDetails()
+        pangesture.isEnabled = true
     }
     
     @IBAction func handleCurrentTimeSliderChange(_ sender: Any) {
@@ -147,12 +222,24 @@ class PlayerDetailsView:UIView{
         if player.timeControlStatus == .paused{
             player.play()
             playPauseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
+            miniPlayPouseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
             enlargeEpisodeImageView()
         }else{
             player.pause()
             playPauseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
+            miniPlayPouseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
             shrinkEpisodeImageView()
         }
     }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
 }
