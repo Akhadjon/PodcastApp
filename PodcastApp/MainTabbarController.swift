@@ -40,7 +40,7 @@ class MainTabbarController:UITabBarController{
         }
     }
     
-    func maximizePlayerDetails(episode:Episode?){
+    func maximizePlayerDetails(episode:Episode?,playlistEpisodes:[Episode] = []){
         minimizedTopAnchorConstrainst.isActive = false
         maximizedTopAnchorConstrainst.isActive = true
         maximizedTopAnchorConstrainst.constant = 0
@@ -49,6 +49,7 @@ class MainTabbarController:UITabBarController{
         if  episode != nil{
             playerDetailsView.episode = episode
         }
+        playerDetailsView.playlistEpisodes = playlistEpisodes
     
         UIView.animate(withDuration: 0.5,
                        delay: 0,

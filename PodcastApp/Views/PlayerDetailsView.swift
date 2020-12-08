@@ -7,6 +7,8 @@
 
 import UIKit
 import AVKit
+import MediaPlayer
+
 
 class PlayerDetailsView:UIView{
     
@@ -15,11 +17,32 @@ class PlayerDetailsView:UIView{
             miniTitleLabel.text = episode.title
             titleLabel.text = episode.title
             authorLabel.text = episode.author
+            
+            setupNowPlayingInfo()
+            setupAiudioSession()
             playEpisode()
-            guard let url = URL(string: episode.imageUrl?.toSecureHTTPS() ?? "") else{return}
-            episodeImageView.sd_setImage(with: url, completed: nil)
-            miniEpisodeImageView.sd_setImage(with: url, completed: nil)
+            
+            guard let url = URL(string: episode.imageUrl ?? "") else { return }
+            episodeImageView.sd_setImage(with: url)
+            miniEpisodeImageView.sd_setImage(with: url)
+            
+            miniEpisodeImageView.sd_setImage(with: url) { (image, _, _, _) in
+                let image = self.episodeImageView.image ?? UIImage()
+                let artworkItem = MPMediaItemArtwork(boundsSize: image.size, requestHandler: { (size) -> UIImage in
+                    print(image)
+                    return image
+                    
+                })
+                MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyArtwork] = artworkItem
+            }
         }
+    }
+    
+    fileprivate func  setupNowPlayingInfo(){
+        var nowPlayingInfo = [String:Any]()
+        nowPlayingInfo[MPMediaItemPropertyTitle] = episode.title
+        nowPlayingInfo[MPMediaItemPropertyArtist] = episode.author
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
     
     
@@ -48,6 +71,8 @@ class PlayerDetailsView:UIView{
             
         }
     }
+    
+    
     
     fileprivate func updateCurrentTimeSlider(){
         let currentTimeSeconds = CMTimeGetSeconds(player.currentTime())
@@ -81,22 +106,158 @@ class PlayerDetailsView:UIView{
 
         }
     }
+    fileprivate func setupAiudioSession(){
+        do{
+            try AVAudioSession.sharedInstance().setCategory(AVAudioSession.Category.playback)
+            try AVAudioSession.sharedInstance().setActive(true)
+        }catch let sessionError {
+            print("Failed to activate session:  ", sessionError)
+        }
+        
+    }
     
-    override func awakeFromNib() {
-        super.awakeFromNib()
+    fileprivate func setupRemoteControl(){
+    
+        UIApplication.shared.beginReceivingRemoteControlEvents()
+        let commandCenter = MPRemoteCommandCenter.shared()
+        commandCenter.playCommand.isEnabled = true
+        commandCenter.playCommand.addTarget { (_) -> MPRemoteCommandHandlerStatus in
+            self.player.play()
+            self.playPauseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
+            self.miniPlayPouseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
+            self.enlargeEpisodeImageView()
+            self.setupEllapsedTime()
+            MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPNowPlayingInfoPropertyPlaybackRate] = 1
+            return .success
+        }
+        commandCenter.pauseCommand.addTarget { (_) -> MPRemoteCommandHandlerStatus in
+            self.player.pause()
+            self.playPauseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
+            self.miniPlayPouseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
+            self.setupEllapsedTime()
+            MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPNowPlayingInfoPropertyPlaybackRate] = 0
+            return .success
+        }
+        commandCenter.togglePlayPauseCommand.isEnabled = true
+        commandCenter.togglePlayPauseCommand.addTarget { (_) -> MPRemoteCommandHandlerStatus in
+            self.handlePlayPause()
+            return .success
+        }
         
-        setupGestures()
+        commandCenter.nextTrackCommand.addTarget { (_) -> MPRemoteCommandHandlerStatus in
+            self.handleNextTrack()
+            return .success
+        }
+        commandCenter.previousTrackCommand.addTarget { (_) -> MPRemoteCommandHandlerStatus in
+            self.handlePrevTrack()
+            return .success
+        }
+    }
+    var playlistEpisodes = [Episode]()
+    
+     fileprivate func handleNextTrack(){
+
+        if playlistEpisodes.count == 0 {
+            return
+        }
+       let currentEpisodeIndex = playlistEpisodes.firstIndex { (ep) -> Bool in
+            return self.episode.title == ep.title && self.episode.author == ep.author
+        }
+        guard let index = currentEpisodeIndex else {return}
         
-        observePlayerCurrentTime()
+        let nextEpisode :Episode
+        if index == playlistEpisodes.count - 1{
+            nextEpisode = playlistEpisodes[0]
+        }else{
+            nextEpisode = playlistEpisodes[index+1]
+        }
+        self.episode = nextEpisode
+    }
+    fileprivate func handlePrevTrack(){
+        if playlistEpisodes.count == 0 {
+            return
+        }
+       let currentEpisodeIndex = playlistEpisodes.firstIndex { (ep) -> Bool in
+            return self.episode.title == ep.title && self.episode.author == ep.author
+        }
+        guard let index = currentEpisodeIndex else {return}
+        let count = playlistEpisodes.count
+        let nextEpisode :Episode
+        if index == 0{
+            nextEpisode = playlistEpisodes[count - 1]
+        }else{
+            nextEpisode = playlistEpisodes[index-1]
+        }
+        self.episode = nextEpisode
+    }
+    
+    fileprivate func setupEllapsedTime(){
+        let ellapsedTime = CMTimeGetSeconds(player.currentTime())
+        MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPNowPlayingInfoPropertyElapsedPlaybackTime] = ellapsedTime
+    }
+    
+    fileprivate func observeBoundaryTime() {
         let time = CMTimeMake(value: 1, timescale: 3)
         let times = [NSValue(time:time)]
         player.addBoundaryTimeObserver(forTimes: times, queue: .main) { [weak self] in
-            print("Episode started playing")
             self?.enlargeEpisodeImageView()
+            self?.setupLockScreenDuration()
         }
     }
     
     
+    fileprivate func setupLockScreenDuration(){
+        guard let duration = player.currentItem?.duration else{return}
+        let durationInSeconds = CMTimeGetSeconds(duration)
+        MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPMediaItemPropertyPlaybackDuration] = durationInSeconds
+    }
+    
+    fileprivate func setupInterruptionObserver(){
+        NotificationCenter.default.addObserver(self, selector: #selector(handleInterruption), name:AVAudioSession.interruptionNotification, object: nil)
+    }
+    
+    @objc fileprivate func handleInterruption(notification:Notification){
+       
+        guard let userInfo = notification.userInfo,
+               let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+               let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+                   return
+           }
+
+           // Switch over the interruption type.
+           switch type {
+           case .began:
+               print("interruption began")
+            playPauseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
+            miniPlayPouseButton.setImage(#imageLiteral(resourceName: "play"), for: .normal)
+
+           case .ended:
+            guard let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt else { return }
+            let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
+            if options.contains(.shouldResume) {
+                player.play()
+                
+                playPauseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
+                miniPlayPouseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
+            } else {
+               return
+            }
+           
+            
+           }
+        
+    }
+    override func awakeFromNib() {
+        super.awakeFromNib()
+        
+        setupRemoteControl()
+        setupGestures()
+        setupInterruptionObserver()
+        
+        observePlayerCurrentTime()
+        
+        observeBoundaryTime()
+    }
     
 
     static func initFromNib()->PlayerDetailsView{
@@ -109,8 +270,6 @@ class PlayerDetailsView:UIView{
     
 
     //MARK:IBActions and Outlets
-    
-    
     
     @IBOutlet weak var miniPlayerView: UIView!
     @IBOutlet weak var maximizedStackView: UIStackView!
@@ -134,12 +293,13 @@ class PlayerDetailsView:UIView{
     }
     
     @IBAction func handleCurrentTimeSliderChange(_ sender: Any) {
-        print("SliderValue : ", currentTimeSlider.value)
         let percentage = currentTimeSlider.value
         guard let duration  = player.currentItem?.duration else{ return }
         let durationInSeconds = CMTimeGetSeconds(duration)
         let seekTimeInSeconds = Float64(percentage)*durationInSeconds
         let seekTime = CMTimeMakeWithSeconds(seekTimeInSeconds, preferredTimescale: Int32(NSEC_PER_SEC))
+        
+        MPNowPlayingInfoCenter.default().nowPlayingInfo?[MPNowPlayingInfoPropertyElapsedPlaybackTime] = seekTimeInSeconds
         player.seek(to: seekTime)
         
     }
@@ -199,7 +359,6 @@ class PlayerDetailsView:UIView{
     
     
     @objc func handlePlayPause(){
-        print("trying to play and pause")
         if player.timeControlStatus == .paused{
             player.play()
             playPauseButton.setImage(#imageLiteral(resourceName: "pause"), for: .normal)
