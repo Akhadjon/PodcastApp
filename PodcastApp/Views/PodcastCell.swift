@@ -15,6 +15,8 @@ class PodcastCell: UITableViewCell {
             podcastImageView.layer.cornerRadius = 5
         }
     }
+    
+    
     @IBOutlet weak var trackNameLabel: UILabel!
     @IBOutlet weak var artistNameLabel: UILabel!
     @IBOutlet weak var episodeCountLabel: UILabel!
